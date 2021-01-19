@@ -1,10 +1,11 @@
+import time
 import inline as inline
 import matplotlib
-#%matplotlib inline
 import os
-
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import Perceptron
 from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
 
 os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/Graphviz/bin/'
 import graphviz
@@ -17,7 +18,7 @@ from sklearn import tree, preprocessing
 from sklearn.datasets import load_breast_cancer
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_predict
 from sklearn.neural_network import MLPClassifier
 import seaborn as sns
 from sklearn.tree import export_text
@@ -26,16 +27,28 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import normalize, StandardScaler
 from sklearn.metrics import accuracy_score
 
-
 sns.set()
 df = pd.read_csv('student-mat.csv')
+sp = pd.read_csv('student-por.csv')
+df = df.append(sp, ignore_index=True)
+my_labels = 'Male','Female'
+print(df.groupby('activities').count()['school'])
+sex = df.groupby('activities').count()['school']
+labels = "Yes", "No"
+plt.pie(sex, labels= labels, autopct='%1.1f%%')
+plt.title('Extra-curricular activities')
+plt.axis('equal')
+plt.savefig('activities.png')
+plt.show()
+plt.close()
+print(df)
 print(df.isnull().any())
 print(df.dtypes)
 print(df)
 le = preprocessing.LabelEncoder()
 ds = df.apply(le.fit_transform)
 df['school'] = ds['school']
-#df['sex'] = ds['sex']
+df['sex'] = ds['sex']
 df['address'] = ds['address']
 df['famsize'] = ds['famsize']
 df['Pstatus'] = ds['Pstatus']
@@ -52,154 +65,173 @@ df['internet'] = ds['internet']
 df['romantic'] = ds['romantic']
 df['reason'] = ds['reason']
 print(df)
-all_inputs = df[['school', 'age', 'address', 'famsize', 'Pstatus', 'Medu', 'Fedu', 'Mjob', 'Fjob', 'reason',
-                 'guardian', 'traveltime', 'studytime', 'failures', 'schoolsup', 'famsup', 'paid', 'activities',
-                 'nursery', 'higher', 'internet', 'romantic', 'famrel', 'freetime', 'goout', 'Dalc', 'Walc','health',
-                 'absences', 'G1', 'G2', 'G3']].values
-all_classes = df['sex'].values
+columns = list(df.columns)
+classes_list = ['Pstatus', 'school', 'schoolsup', 'famsup', 'activities', 'nursery', 'higher', 'romantic']
+# classes_list = ['Pstatus']
+score_tree = []
+score_naive = []
+score_knn3 = []
+score_knn5 = []
+score_knn11 = []
+score_neural = []
+score_forest = []
+score_svc = []
+time_tree = []
+time_naive = []
+time_knn3 = []
+time_knn5 = []
+time_knn11 = []
+time_neural = []
+time_forest = []
+time_svc = []
+for column in classes_list:
+    columns.pop(columns.index(column))
+    all_inputs = df[columns]
+    all_classes = df[column].values
+    (train_inputs, test_inputs, train_classes, test_classes) = train_test_split(all_inputs, all_classes, train_size=0.3,
+                                                                                random_state=1)
+    print("Class:", column)
+    # DecisionTree Clasification
 
-(train_inputs, test_inputs, train_classes, test_classes) = train_test_split(all_inputs, all_classes, train_size=0.3, random_state=1)
+    dtc = DecisionTreeClassifier()
+    start = time.time()
+    dtc.fit(train_inputs, train_classes)
+    predictions = dtc.predict(test_inputs)
+    print("DecisionTree:", dtc.score(test_inputs, test_classes))
+    end = time.time()
+    time_tree.append(end - start)
+    predicted = cross_val_predict(dtc, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_tree.append(dtc.score(test_inputs, test_classes))
 
-print(train_inputs)
-print(train_classes)
-features = ('school', 'age', 'address', 'famsize', 'Pstatus', 'Medu', 'Fedu', 'Mjob', 'Fjob', 'reason',
-                 'guardian', 'traveltime', 'studytime', 'failures', 'schoolsup', 'famsup', 'paid', 'activities',
-                 'nursery', 'higher', 'internet', 'romantic', 'famrel', 'freetime', 'goout', 'Dalc', 'Walc','health',
-                 'absences', 'G1', 'G2', 'G3')
-classes = ('sex')
+    gnb = GaussianNB()
+    start = time.time()
+    gnb.fit(train_inputs, train_classes)
+    print("Naive Bayes:", gnb.score(test_inputs, test_classes))
+    end = time.time()
+    time_naive.append(end - start)
+    predicted = cross_val_predict(gnb, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_naive.append(gnb.score(test_inputs, test_classes))
 
-dtc = DecisionTreeClassifier()
-dtc.fit(train_inputs, train_classes)
-print(dtc.score(test_inputs, test_classes))
+    mlp = MLPClassifier(hidden_layer_sizes=(10, 10), max_iter=2000)
+    start = time.time()
+    mlp.fit(train_inputs, train_classes)
+    print("Neural:", mlp.score(test_inputs, test_classes))
+    end = time.time()
+    time_neural.append(end - start)
+    predicted = cross_val_predict(mlp, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_neural.append(mlp.score(test_inputs, test_classes))
 
+    knn3 = KNeighborsClassifier(n_neighbors=3)
+    start = time.time()
+    knn3.fit(train_inputs, train_classes)
+    print("Knn3:", knn3.score(test_inputs, test_classes))
+    end = time.time()
+    time_knn3.append(end - start)
+    predicted = cross_val_predict(knn3, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_knn3.append(knn3.score(test_inputs, test_classes))
 
-X, y = test_inputs, test_classes
-clf = tree.DecisionTreeClassifier()
-clf = clf.fit(X, y)
+    knn5 = KNeighborsClassifier(n_neighbors=5)
+    start = time.time()
+    knn5.fit(train_inputs, train_classes)
+    print("Knn5:", knn5.score(test_inputs, test_classes))
+    end = time.time()
+    time_knn5.append(end - start)
+    predicted = cross_val_predict(knn5, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_knn5.append(knn5.score(test_inputs, test_classes))
 
-print(tree.plot_tree(clf))
+    knn11 = KNeighborsClassifier(n_neighbors=11)
+    start = time.time()
+    knn11.fit(train_inputs, train_classes)
+    print("Knn11:", knn11.score(test_inputs, test_classes))
+    end = time.time()
+    time_knn11.append(end - start)
+    predicted = cross_val_predict(knn11, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_knn11.append(knn11.score(test_inputs, test_classes))
 
-#dot_data = tree.export_graphviz(clf, out_file=None)
-#graph = graphviz.Source(dot_data)
-iris = load_iris()
-#print(iris)
-#print(df)
-dot_data = tree.export_graphviz(clf, out_file=None,
-                      feature_names=features,
-                      class_names=test_classes,
-                      filled=True, rounded=True,
-                      special_characters=True)
-#dot_data = tree.export_graphviz(clf, out_file=None)
-graph = graphviz.Source(dot_data)
-graph.render("TreeSex")
-decision_tree = DecisionTreeClassifier(random_state=0, max_depth=2)
-decision_tree = decision_tree.fit(iris.data, iris.target)
-r = export_text(decision_tree, feature_names=iris['feature_names'])
-print(r)
+    svc = SVC()
+    start = time.time()
+    svc.fit(train_inputs, train_classes)
+    print("Support Vector:", svc.score(test_inputs, test_classes))
+    end = time.time()
+    time_svc.append(end - start)
+    predicted = cross_val_predict(svc, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_svc.append(svc.score(test_inputs, test_classes))
 
-X2, y2 = load_iris(return_X_y=True)
-X_train, X_test, y_train, y_test = train_test_split(X2, y2, test_size=0.5, random_state=0)
-gnb = GaussianNB()
-y_pred = gnb.fit(X_train, y_train).predict(X_test)
-print("Number of mislabeled points out of a total %d points : %d"
-     % (X_test.shape[0], (y_test != y_pred).sum()))
-#print(graph.render("iris"))
+    rfc = RandomForestClassifier()
+    start = time.time()
+    rfc.fit(train_inputs, train_classes)
+    print("Forest:", rfc.score(test_inputs, test_classes))
+    end = time.time()
+    time_forest.append(end - start)
+    predicted = cross_val_predict(rfc, all_inputs, all_classes)
+    class_labels = list(set(predicted))
+    model_cm = confusion_matrix(y_true=all_classes, y_pred=predicted, labels=class_labels)
+    print(model_cm)
+    score_forest.append(rfc.score(test_inputs, test_classes))
 
-breast_cancer = load_breast_cancer()
-X = pd.DataFrame(breast_cancer.data, columns=breast_cancer.feature_names)
-X = X[['mean area', 'mean compactness']]
-y = pd.Categorical.from_codes(breast_cancer.target, breast_cancer.target_names)
-y = pd.get_dummies(y, drop_first=True)
+    columns = list(df.columns)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
+print("Decision Tree:", np.mean(score_tree))
+print("Time:", np.mean(time_tree))
+print("Naive Bayes:", np.mean(score_naive))
+print("Time:", np.mean(time_naive))
+print("Neural:", np.mean(score_neural))
+print("Time:", np.mean(time_neural))
+print("Knn3:", np.mean(score_knn3))
+print("Time:", np.mean(time_knn3))
+print("Knn5:", np.mean(score_knn5))
+print("Time:", np.mean(time_knn5))
+print("Knn11:", np.mean(score_knn11))
+print("Time:", np.mean(time_knn11))
+print("Support Vector:", np.mean(score_svc))
+print("Time:", np.mean(time_svc))
+print("Forest:", np.mean(score_forest))
+print("Time:", np.mean(time_forest))
 
-knn = KNeighborsClassifier(n_neighbors=5, metric='euclidean')
-knn.fit(X_train, y_train)
+labels = ['DTC', 'NB', 'MLP',
+          'Knn3', 'Knn5', 'Knn11', 'SVC', 'RFC']
+scores = [np.mean(score_tree), np.mean(score_naive), np.mean(score_neural), np.mean(score_knn3),
+          np.mean(score_knn5), np.mean(score_knn11), np.mean(score_svc), np.mean(score_forest)]
+# scores = list(map(lambda x: round(x * 100, 1), scores))
+times = [np.mean(time_tree), np.mean(time_naive), np.mean(time_neural), np.mean(time_knn3),
+         np.mean(time_knn5), np.mean(time_knn11), np.mean(time_svc), np.mean(time_forest)]
 
-y_pred = knn.predict(X_test)
+plot_space = max(scores) - min(scores)
+plt.ylim([min(scores) - plot_space, max(scores) + plot_space])
+plt.bar(labels, scores)
+for i, v in enumerate(scores):
+    plt.text(i - .3, v + 3, str(v))
+plt.xlabel('Klasyfikatory')
+plt.ylabel('Dokładność')
+plt.title('Spożycie alkoholu przez studentów - Średnie Dokładności klasyfikatorów')
+plt.savefig('accuracy_Normalized.png')
+plt.show()
 
-sns.scatterplot(
-    x='mean area',
-    y='mean compactness',
-    hue='benign',
-    data=X_test.join(y_test, how='outer')
-)
-
-plt.scatter(
-    X_test['mean area'],
-    X_test['mean compactness'],
-    c=y_pred,
-    cmap='coolwarm',
-    alpha=0.7
-)
-print(confusion_matrix(y_test, y_pred))
-data=pd.read_csv("iris.csv")
-
-print(iris.data[:3])
-print(iris.data[15:18])
-print(iris.data[37:40])
-
-X = iris.data[:, (2, 3)]
-
-print(iris.target)
-
-y = (iris.target==0).astype(np.int8)
-print(y)
-
-p = Perceptron(random_state=42,
-              max_iter=10,
-              tol=0.001)
-p.fit(X, y)
-
-
-values = [[1.5, 0.1], [1.8, 0.4], [1.3,0.2]]
-
-for value in X:
-    pred = p.predict([value])
-    print([pred])
-
-X = [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]
-y = [0, 0, 0, 1]
-clf = MLPClassifier(solver='lbfgs', alpha=1e-5,
-                    hidden_layer_sizes=(5, 2), random_state=1)
-
-print(clf.fit(X, y))
-
-X = [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]
-y = [0, 0, 0, 1]
-clf = MLPClassifier(solver='lbfgs', alpha=1e-5,
-                    hidden_layer_sizes=(5, 2), random_state=1)
-
-print(clf.fit(X, y))
-# creating an classifier from the model:
-datasets = train_test_split(iris.data, iris.target,
-                            test_size=0.2)
-
-train_data, test_data, train_labels, test_labels = datasets
-
-scaler = StandardScaler()
-
-# we fit the train data
-scaler.fit(train_data)
-
-# scaling the train data
-train_data = scaler.transform(train_data)
-test_data = scaler.transform(test_data)
-
-print(train_data[:3])
-
-mlp = MLPClassifier(hidden_layer_sizes=(10, 10), max_iter=1000)
-
-# let's fit the training data to our model
-mlp.fit(train_data, train_labels)
-
-predictions_train = mlp.predict(train_data)
-print(accuracy_score(predictions_train, train_labels))
-predictions_test = mlp.predict(test_data)
-print(accuracy_score(predictions_test, test_labels))
-
-confusion_matrix(predictions_train, train_labels)
-
-confusion_matrix(predictions_test, test_labels)
-
-print(classification_report(predictions_test, test_labels))
+plot_space = max(times) - min(times)
+plt.bar(labels, times)
+plt.xlabel('Klasyfikatory')
+plt.ylabel('Czas (sekundy)')
+plt.title('Spożycie alkoholu przez studentów - Średnie Czasy Działania klasyfikatorów')
+plt.savefig('timing_Normalized.png')
+plt.show()
